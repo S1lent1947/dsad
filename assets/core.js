@@ -109,12 +109,34 @@ function csvLike(l) {
   return s.split(',').every((p) => p.trim().split(/\s+/).length <= 5 && p.length <= 60);
 }
 
-function joinExample(lines) {
-  const header = lines[0].split(',').map((s) => s.trim());
+// lipește două bucăți de rând rupte de PDF („…,F” + „ermeMixte,…”)
+function glue(a, b, known) {
+  if (/,$/.test(a) || /^,/.test(b)) return a + b;
+  const tail = a.split(',').pop().trim();
+  const head = b.split(',')[0].trim();
+  if (known.includes(tail + head)) return a + b;
+  if (known.includes(`${tail} ${head}`)) return `${a} ${b}`;
+  if (/[a-z]$/.test(a) && /^[A-Z]/.test(b)) return `${a} ${b}`;
+  return a + b;
+}
+
+function joinExample(lines, known = []) {
+  const L = lines.map((l) => l.trim()).filter(Boolean);
+  const cnt = (s) => s.split(',').length;
+  let R = 0;
+  for (const l of L.slice(1)) R = Math.max(R, cnt(l));
+  // antetul poate fi și el rupt pe mai multe rânduri
+  let headLine = L[0];
+  let start = 1;
+  while (start < L.length && cnt(headLine) < R && cnt(glue(headLine, L[start], known)) <= R) {
+    headLine = glue(headLine, L[start], known);
+    start++;
+  }
+  const header = headLine.split(',').map((s) => s.trim());
   const H = header.length;
   const rows = [];
   let cur = '';
-  for (const l of lines.slice(1)) {
+  for (const l of L.slice(start)) {
     const s = l.trim();
     if (!s) continue;
     if (!cur) cur = s;
@@ -126,7 +148,7 @@ function joinExample(lines) {
   return { header, rows };
 }
 
-function parseBlock(num, blines, files) {
+function parseBlock(num, blines, files, known = []) {
   let exStart = -1, labelAt = -1;
   for (let i = 0; i < blines.length; i++) {
     if (/^\s*exemplu\b/i.test(blines[i])) { labelAt = i; exStart = i + 1; break; }
@@ -152,7 +174,7 @@ function parseBlock(num, blines, files) {
       }
       if (csvLike(l) || /^[\d.,eE+\-\s]+$/.test(l.trim())) ex.push(l); else break;
     }
-    if (ex.length) example = joinExample(ex);
+    if (ex.length) example = joinExample(ex, known);
   }
   const outs = [...desc.matchAll(CSVNAME)].map((m) => m[1])
     .filter((n) => !files.some((f) => fkey(f) === fkey(n) || lev(fkey(f), fkey(n)) <= 2));
@@ -199,7 +221,7 @@ export function parseProblem(raw) {
     const block = lines.slice(s.i, end);
     block[0] = block[0].slice(s.cut);
     if (k === starts.length - 1) { const st = block.findIndex((l, j) => j > 0 && STOP_LINE.test(l)); if (st > 0) block.length = st; }
-    return parseBlock(s.num, block, files);
+    return parseBlock(s.num, block, files, mainCols);
   });
   return { intro, files, mainCols, reqs };
 }
@@ -545,6 +567,11 @@ export function deriveParams(type, req, ctx, prev = []) {
       }
       const keep = H.length ? H.filter((c) => c !== ctx.idx && ctx.cols.includes(c)) : parseSaved(t, ctx) || [];
       if (keep.length && keep.length < ctx.cols.length) p.keep = keep;
+      // „…și cifra de afaceri totală”: totalul calculat apare ca o coloană nouă
+      if (p.col === '__total__') {
+        if (H.length && lastIsNew) p.totalName = H[H.length - 1];
+        else if (!H.length && /(se\s+va\s+(salva|afisa)|vor\s+fi\s+salvate)[^.]*\btotal/.test(t)) p.totalName = 'Total';
+      }
       break;
     }
     case 'indicator_rand': {
@@ -614,8 +641,9 @@ export function deriveParams(type, req, ctx, prev = []) {
       if (ex) {
         const after = t.slice(ex.index + ex[0].length).split(/\s+(?:si|pentru|la\s+nivel|din\s+fiecare)\s|[,.;(]/)[0];
         const r = parseRatio(after, ctx);
-        if (r.found) Object.assign(p, { A: r.A === '__total__' ? (matchCol(after, numCands(ctx)) || ctx.vars[0] || '') : r.A, B: r.B, k: r.k });
-        else Object.assign(p, { A: matchCol(after, numCands(ctx)) || ctx.vars[0] || '', B: '' });
+        // fără o coloană potrivită („cifra de afaceri” când există doar activități) = totalul variabilelor
+        if (r.found) Object.assign(p, { A: r.A, B: r.B, k: r.k });
+        else Object.assign(p, { A: matchCol(after, numCands(ctx)) || (ctx.vars.length > 1 ? '__total__' : ctx.vars[0] || ''), B: '' });
       }
       if (ent && ent.kind === 'row' && /^judet/.test(ent.word) && p.group && !/judet|county/i.test(p.group)) {
         const jc = ctx.groupCols.find((c) => /^judet|^county|^indicativ/i.test(c));
@@ -1002,10 +1030,11 @@ export const TEMPLATES = {
       { k: 'col', label: 'Condiția pe coloana', type: 'col', allowTotal: true, from: 'main' },
       { k: 'op', label: 'Operator', type: 'select', options: ['>', '>=', '<', '<=', '==', '!='] },
       { k: 'val', label: 'Valoare (număr sau „media”)', type: 'text' },
+      { k: 'totalName', label: 'Salvează și totalul în coloana (opțional)', type: 'text', placeholder: 'ex. CifraAfaceri', showIf: (p) => p.col === '__total__' },
       { k: 'keep', label: 'Coloane salvate (nimic bifat = toate)', type: 'cols', from: 'main' },
       F_SORT, { k: 'sortBy', label: 'Sortează după', type: 'col', optional: true, from: 'main' }, ...fieldsOut(),
     ],
-    defaults: (ctx) => ({ col: ctx.vars.length > 1 ? '__total__' : ctx.vars[0] || '', op: '>', val: '0', keep: [], sortBy: '' }),
+    defaults: (ctx) => ({ col: ctx.vars.length > 1 ? '__total__' : ctx.vars[0] || '', op: '>', val: '0', keep: [], sortBy: '', totalName: '' }),
     needs: (p, ctx) => [...(p.col === '__total__' ? ctx.vars : [p.col]), ...(p.keep || []), p.sortBy],
     gen(p, ctx, n, F) {
       const L = [];
@@ -1019,9 +1048,13 @@ export const TEMPLATES = {
       } else cond = `${S}[${pyStr(p.col)}] ${p.op} ${val(`${S}[${pyStr(p.col)}]`)}`;
       const sel = p.keep && p.keep.length ? `[${pyList(p.keep)}]` : '';
       const v = `df_cerinta${n}`;
-      L.push(`${v} = ${S}[${cond}]${sel}`);
+      const withTotal = p.col === '__total__' && String(p.totalName || '').trim();
+      if (withTotal) {
+        L.push(`${v} = ${S}[${cond}]${sel}.copy()`);
+        L.push(`${v}[${pyStr(withTotal)}] = s_total${n}`);
+      } else L.push(`${v} = ${S}[${cond}]${sel}`);
       idxName(L, v, p);
-      L.push(saveLine(v, p, ctx, { sortBy: p.sortBy || (p.col !== '__total__' ? p.col : null) }));
+      L.push(saveLine(v, p, ctx, { sortBy: p.sortBy || (withTotal || (p.col !== '__total__' ? p.col : null)) }));
       return { lines: L };
     },
   },
@@ -1243,7 +1276,7 @@ export const TEMPLATES = {
     fields: [
       { k: 'group', label: 'Pentru fiecare', type: 'group' },
       { k: 'perVar', label: 'Câte un rezultat pentru fiecare variabilă', type: 'bool' },
-      { k: 'A', label: 'Indicator: coloana A', type: 'col', showIf: (p) => !p.perVar },
+      { k: 'A', label: 'Indicator: coloana A', type: 'col', allowTotal: true, showIf: (p) => !p.perVar },
       { k: 'B', label: 'împărțită la B (opțional)', type: 'col', optional: true, showIf: (p) => !p.perVar },
       { k: 'k', label: 'Înmulțește cu k', type: 'text', showIf: (p) => !p.perVar && p.B },
       { k: 'vars', label: 'Variabile', type: 'cols', from: 'vars', showIf: (p) => p.perVar },
@@ -1255,7 +1288,7 @@ export const TEMPLATES = {
       ...fieldsOut(), F_IDX,
     ],
     defaults: (ctx) => ({ group: ctx.groupCols[0] || '', perVar: false, A: ctx.vars[0] || '', B: '', k: '1', vars: ctx.vars.slice(), fn: 'max', show: ctx.nameCol || '', agr: '', withValue: false, name: 'Localitate', cols2: null }),
-    needs: (p, ctx) => [p.group, p.show, p.agr, ...(p.perVar ? p.vars : [p.A, p.B])],
+    needs: (p, ctx) => [p.group, p.show, p.agr, ...(p.perVar ? p.vars : [...(p.A === '__total__' ? ctx.vars : [p.A]), p.B])],
     gen(p, ctx, n, F) {
       const L = [];
       const g = p.group;
@@ -1272,11 +1305,15 @@ export const TEMPLATES = {
       const kk = p.k && String(p.k).trim() !== '1' ? ` * ${p.k}` : '';
       const base = `df_c${n}`;
       let ind = p.A;
+      const total = p.A === '__total__';
+      const aCols = total ? ctx.vars : [p.A];
+      const aExpr = (b) => (total ? `${b}[${V(ctx.vars, ctx)}].sum(axis=1)` : `${b}[${pyStr(p.A)}]`);
+      const indLine = (b) => (p.B ? `${b}["Indicator"] = ${aExpr(b)}${kk} / ${b}[${pyStr(p.B)}]` : `${b}["Indicator"] = ${aExpr(b)}${kk}`);
       if (p.agr) {
         // ex. pentru fiecare regiune, județul cu cea mai mare valoare: întâi totaluri pe județe
-        const cols = uniq([p.A, p.B].filter(Boolean));
-        L.push(`${base} = ${F([...cols, g, p.agr])}[${pyList([...cols, g, p.agr])}].groupby(by=[${pyStr(g)}, ${pyStr(p.agr)}]).sum()`);
-        if (p.B) { ind = 'Indicator'; L.push(`${base}["Indicator"] = ${base}[${pyStr(p.A)}]${kk} / ${base}[${pyStr(p.B)}]`); }
+        const extra = uniq([p.B, g, p.agr].filter(Boolean));
+        L.push(`${base} = ${F([...aCols, ...extra])}[${LP(aCols, extra, ctx)}].groupby(by=[${pyStr(g)}, ${pyStr(p.agr)}]).sum()`);
+        if (p.B || total) { ind = 'Indicator'; L.push(indLine(base)); }
         const v = `s_cerinta${n}`;
         L.push(`${v} = ${base}.groupby(level=0).apply(`);
         L.push(`    func=lambda x: x[${pyStr(ind)}].${idx}()[1])`);
@@ -1285,12 +1322,12 @@ export const TEMPLATES = {
         L.push(saveLine(v, p, ctx, { allowSort: false }));
         return { lines: L };
       }
-      let src = F([show, p.A, g]);
-      if (p.B) {
-        const cols = uniq([show, p.A, p.B, g]);
-        L.push(`${base} = ${F(cols)}[${pyList(cols)}].copy()`);
+      let src = F([show, ...aCols, g]);
+      if (p.B || total) {
+        const extra = uniq([show, p.B, g].filter(Boolean));
+        L.push(`${base} = ${F([...aCols, ...extra])}[${LP(aCols, extra, ctx)}].copy()`);
         ind = 'Indicator';
-        L.push(`${base}["Indicator"] = ${base}[${pyStr(p.A)}]${kk} / ${base}[${pyStr(p.B)}]`);
+        L.push(indLine(base));
         src = base;
       }
       if (p.withValue) {
