@@ -18,6 +18,7 @@
     <a href="#rezolva" data-view="rezolva">Rezolvă</a>
     <a href="#rezolvari" data-view="rezolvari">Rezolvări</a>
     <a href="#fituica" data-view="fituica">Fițuică</a>
+    <a href="#pycharm" data-view="pycharm">PyCharm</a>
   </nav>
   <button class="theme" id="theme" type="button" aria-label="Schimbă tema (deschisă / închisă)" title="Temă deschisă / închisă">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 0 18V3z"/><circle cx="12" cy="12" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
@@ -28,6 +29,15 @@
   <section id="view-rezolva" class="view">
     <div class="solver">
       <div class="col-in">
+        <section class="panel idebar" id="ideBar" hidden>
+          <div class="idebar-head">
+            <h2>Proiectul din PyCharm</h2>
+            <button class="link" id="ideReload" type="button">Recitește fișierele</button>
+          </div>
+          <p class="muted" id="ideStatus">Mă conectez la proiect…</p>
+          <button class="btn run big" id="ideWrite" type="button"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M4 2.5v11l9-5.5z"/></svg>Scrie main.py în proiect și rulează</button>
+        </section>
+
         <section class="panel paste">
           <h1>Lipește subiectul</h1>
           <p class="lead">Copiază tot textul din PDF, de la „În fișierul…” până la ultima cerință. Codul apare alături, scris ca la seminar.</p>
@@ -37,10 +47,10 @@
 
         <section class="panel files">
           <h2>Fișierele CSV</h2>
-          <p class="muted">Opțional. Cu fișierele încărcate, numele coloanelor sunt exacte și poți rula codul aici. Fișierele rămân pe calculatorul tău.</p>
+          <p class="muted">Opțional. Cu fișierele încărcate, numele coloanelor sunt exacte și poți rula codul aici. Poți pune și PDF-ul subiectului: îi citesc textul singur. Fișierele rămân pe calculatorul tău.</p>
           <label class="drop" id="drop">
-            <input type="file" id="fileInput" accept=".csv,text/csv" multiple>
-            <span>Trage aici fișierele .csv sau <u>alege-le</u></span>
+            <input type="file" id="fileInput" accept=".csv,.pdf,text/csv,application/pdf" multiple>
+            <span>Trage aici fișierele .csv și PDF-ul subiectului sau <u>alege-le</u></span>
           </label>
           <div id="fileList" class="file-list"></div>
         </section>
@@ -98,6 +108,38 @@
 
   <section id="view-rezolvari" class="view" hidden></section>
   <section id="view-fituica" class="view" hidden></section>
+
+  <section id="view-pycharm" class="view" hidden>
+    <div class="pyc">
+      <section class="panel pyc-hero">
+        <h1>Plugin pentru PyCharm</h1>
+        <p class="lead">Același generator, direct în PyCharm. Citește fișierele CSV și PDF-ul subiectului din proiect, scrie <code>main.py</code> și îl pornește.</p>
+        <a class="btn run big" href="plugin/dsad-pycharm.zip" download>Descarcă pluginul (dsad-pycharm.zip)</a>
+        <p class="muted small">Pentru PyCharm 2022.3 sau mai nou. Are nevoie de internet: panoul încarcă acest site.</p>
+      </section>
+      <div class="pyc-grid">
+        <section class="panel">
+          <h2>Instalare</h2>
+          <ol class="steps">
+            <li>Descarcă <code>dsad-pycharm.zip</code>. Nu îl dezarhiva.</li>
+            <li>În PyCharm deschide <b>File → Settings → Plugins</b> (Ctrl+Alt+S).</li>
+            <li>Apasă rotița de lângă tab-ul <b>Installed</b> și alege <b>Install Plugin from Disk…</b></li>
+            <li>Alege fișierul descărcat, apoi repornește PyCharm dacă ți se cere.</li>
+          </ol>
+        </section>
+        <section class="panel">
+          <h2>Folosire la test</h2>
+          <ol class="steps">
+            <li>Pune în proiect fișierele de la test: CSV-urile (de preferat în <code>data_in/</code>) și PDF-ul cu subiectul.</li>
+            <li>Deschide panoul <b>DSAD</b> din bara din dreapta.</li>
+            <li>Verifică cerințele găsite. Dacă PDF-ul nu e în proiect, lipește textul subiectului.</li>
+            <li>Apasă <b>Scrie main.py în proiect și rulează</b>. Rezultatele apar în <code>data_out/</code>, iar în panou vezi ✓ sau ✗ pentru fiecare cerință.</li>
+          </ol>
+          <p class="muted small">Dacă <code>main.py</code> există deja, pluginul te întreabă înainte să-l înlocuiască.</p>
+        </section>
+      </div>
+    </div>
+  </section>
 </main>
 
 <footer class="foot">

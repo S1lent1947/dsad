@@ -11,8 +11,17 @@ Site pentru DSAD: lipești textul subiectului și primești codul pandas scris c
 - **Rezolvări**: seminarele 1–5, temele 2.1 și 2.4 și testul cu I2014, explicate pe cerințe.
 - **Fițuică**: ce trebuie din pandas și numpy, cu căutare.
 
+## Plugin pentru PyCharm
+
+1. Descarcă [`plugin/dsad-pycharm.zip`](plugin/dsad-pycharm.zip) (nu îl dezarhiva).
+2. În PyCharm: **File → Settings → Plugins**, rotița de lângă **Installed** → **Install Plugin from Disk…** → alege zip-ul.
+3. Deschide panoul **DSAD** din dreapta. Citește CSV-urile și PDF-ul subiectului din proiect, iar **Scrie main.py în proiect și rulează** pune codul în proiect și îl pornește.
+
+Merge pe PyCharm 2022.3 sau mai nou. Sursa e în `plugin/src`. Construire: `python plugin/build.py "<folderul PyCharm>"`.
+
 ## Structura
 
 - `index.html`, `assets/`: site-ul (fișiere statice, fără build)
 - `rezolvari/`: rezolvările scrise de mână
 - `data/`: datele de la seminar, pentru exemple
+- `plugin/`: pluginul pentru PyCharm (sursă + `dsad-pycharm.zip`)

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<idea-plugin>
+  <id>ro.dsad.pycharm</id>
+  <name>DSAD Solver</name>
+  <version>1.0.0</version>
+  <vendor url="https://s1lent1947.github.io/dsad/">S1lent1947</vendor>
+  <description><![CDATA[
+    Panou <b>DSAD</b> pentru PyCharm. Citește fișierele CSV și PDF-ul subiectului din proiect,
+    recunoaște cerințele și scrie <code>main.py</code> în stilul seminarelor DSAD (pandas), apoi îl rulează.
+    Folosește site-ul <a href="https://s1lent1947.github.io/dsad/">dsad.py</a>.
+  ]]></description>
+  <idea-version since-build="223"/>
+  <depends>com.intellij.modules.platform</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow id="DSAD" anchor="right" icon="/icons/dsad.svg" factoryClass="ro.dsad.DsadToolWindowFactory"/>
+  </extensions>
+</idea-plugin>

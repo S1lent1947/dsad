@@ -25,7 +25,11 @@ const S = {
   editing: false,
   run: null,
   preset: null,
+  autoText: false,
+  notice: '',
 };
+const IDE = new URLSearchParams(location.search).has('ide');
+if (IDE) document.documentElement.classList.add('in-ide');
 
 // ───────────── temă ─────────────
 const root = document.documentElement;
@@ -39,7 +43,7 @@ $('#theme').addEventListener('click', () => {
 });
 
 // ───────────── navigare ─────────────
-const VIEWS = ['rezolva', 'rezolvari', 'fituica'];
+const VIEWS = ['rezolva', 'rezolvari', 'fituica', 'pycharm'];
 function route() {
   const [v] = (location.hash || '#rezolva').slice(1).split('/');
   const view = VIEWS.includes(v) ? v : 'rezolva';
@@ -53,7 +57,7 @@ function route() {
 window.addEventListener('hashchange', route);
 
 // ───────────── analiza și generarea ─────────────
-function saveDraft() { store.set('draft', { text: S.preset ? '' : S.text, preset: S.preset }); }
+function saveDraft() { if (!IDE) store.set('draft', { text: S.preset ? '' : S.text, preset: S.preset }); }
 
 function analyze() {
   S.problem = C.parseProblem(S.text);
@@ -102,13 +106,73 @@ function renderFiles() {
   }).join('');
 }
 
+// ───────────── PDF → text (pdf.js) ─────────────
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let pdfjsP = null;
+function loadPdfJs() {
+  if (!pdfjsP) {
+    pdfjsP = new Promise((ok, bad) => {
+      if (window.pdfjsLib) return ok(window.pdfjsLib);
+      const s = document.createElement('script');
+      s.src = PDFJS + 'pdf.min.js';
+      s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; ok(window.pdfjsLib); };
+      s.onerror = () => bad(new Error('Nu am putut încărca cititorul de PDF. Verifică internetul.'));
+      document.head.appendChild(s);
+    });
+    pdfjsP.catch(() => { pdfjsP = null; });
+  }
+  return pdfjsP;
+}
+async function pdfToText(data) {
+  const lib = await loadPdfJs();
+  const pdf = await lib.getDocument({ data }).promise;
+  const out = [];
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const page = await pdf.getPage(n);
+    const tc = await page.getTextContent();
+    const rows = [];
+    for (const it of tc.items) {
+      if (!it.str) continue;
+      const y = it.transform[5];
+      let row = rows.find((r) => Math.abs(r.y - y) < 2.5);
+      if (!row) { row = { y, items: [] }; rows.push(row); }
+      row.items.push({ x: it.transform[4], w: it.width, s: it.str });
+    }
+    rows.sort((a, b) => b.y - a.y);
+    for (const r of rows) {
+      r.items.sort((a, b) => a.x - b.x);
+      let line = '';
+      let end = null;
+      for (const it of r.items) {
+        if (end !== null && it.x - end > 1 && !/\s$/.test(line) && !/^\s/.test(it.s)) line += ' ';
+        line += it.s;
+        end = it.x + it.w;
+      }
+      if (line.trim()) out.push(line.replace(/\s+$/, ''));
+    }
+  }
+  return out.join('\n');
+}
+
 async function addFiles(list) {
-  const arr = [...list].filter((f) => /\.csv$/i.test(f.name) || f.type === 'text/csv');
-  if (!arr.length) return;
-  for (const file of arr) {
+  const all = [...list];
+  const pdf = all.find((f) => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+  const csvs = all.filter((f) => /\.csv$/i.test(f.name) || f.type === 'text/csv');
+  if (!pdf && !csvs.length) return;
+  for (const file of csvs) {
     const f = C.fileFromCSV(file.name, await file.text());
     S.uploads = S.uploads.filter((u) => u.name.toLowerCase() !== file.name.toLowerCase());
     S.uploads.push(f);
+  }
+  S.notice = '';
+  if (pdf) {
+    try {
+      const text = await pdfToText(new Uint8Array(await pdf.arrayBuffer()));
+      if (text.trim()) { S.text = text; $('#problem').value = text; }
+      else S.notice = `Nu am găsit text în ${pdf.name} (poate e o poză scanată). Copiază textul de mână.`;
+    } catch (e) {
+      S.notice = `Nu am putut citi ${pdf.name}: ${(e && e.message) || e}`;
+    }
   }
   S.preset = null;
   markPreset();
@@ -351,7 +415,7 @@ function renderScript() {
 }
 
 function renderWarnings() {
-  const w = [...(S.gen ? S.gen.warn : [])];
+  const w = [...(S.notice ? [S.notice] : []), ...(S.gen ? S.gen.warn : [])];
   const ctx = S.ctx;
   if (Object.keys(S.edited).length) w.push('Ai modificat codul de mână, așa că schimbările de la cerințe nu mai apar în el. Apasă „Revino la codul generat” ca să le vezi.');
   if (ctx && ctx.main && ctx.main.source !== 'upload') w.push(`Nu ai încărcat ${ctx.main.name}, așa că numele coloanelor sunt luate din enunț. Încarcă fișierul ca să fie sigur exacte și ca să poți rula codul.`);
@@ -578,6 +642,8 @@ $('#presets').addEventListener('click', (e) => {
 });
 $('#problem').addEventListener('input', debounce((e) => {
   S.text = e.target.value;
+  S.autoText = false;
+  S.notice = '';
   if (S.preset) { S.preset = null; markPreset(); }
   analyze();
 }, 300));
@@ -733,12 +799,83 @@ function renderCheat() {
   });
 }
 
-// ───────────── pornire ─────────────
-const draft = store.get('draft', null);
-route();
-if (draft && draft.preset) loadPreset(draft.preset);
-else {
-  S.text = (draft && draft.text) || '';
-  $('#problem').value = S.text;
+// ───────────── legătura cu PyCharm (pluginul DSAD) ─────────────
+// Pluginul deschide site-ul cu ?ide=1 și injectează window.dsadIDE.call(comanda, câmpuri) -> Promise.
+const ideStatus = (msg) => { $('#ideStatus').textContent = msg; };
+function syncSettingsInputs() {
+  for (const el of $$('[data-set]')) {
+    const k = el.dataset.set;
+    if (el.type === 'checkbox') el.checked = !!S.settings[k];
+    else el.value = S.settings[k] ?? '';
+  }
+}
+async function ideSync() {
+  if (!window.dsadIDE) return;
+  ideStatus('Citesc fișierele din proiect…');
+  let info;
+  try { info = await window.dsadIDE.call('projectInfo'); } catch (e) { info = { ok: false, msg: String(e) }; }
+  if (!info || !info.ok) { ideStatus((info && info.msg) || 'Nu pot citi proiectul.'); return; }
+  S.uploads = (info.files || []).map((f) => C.fileFromCSV(f.name, f.text));
+  S.settings.dirIn = info.dirIn || '';
+  syncSettingsInputs();
+  let from = '';
+  S.notice = '';
+  if (info.pdf && (!S.text.trim() || S.autoText)) {
+    try {
+      const bytes = Uint8Array.from(atob(info.pdf.b64), (c) => c.charCodeAt(0));
+      const text = await pdfToText(bytes);
+      if (text.trim()) { S.text = text; S.autoText = true; $('#problem').value = text; from = info.pdf.name; }
+      else S.notice = `Nu am găsit text în ${info.pdf.name}. Lipește subiectul de mână.`;
+    } catch (e) {
+      S.notice = `Nu am putut citi ${info.pdf.name}: ${(e && e.message) || e}`;
+    }
+  }
+  S.preset = null;
+  markPreset();
+  S.settings.mainFile = '';
   analyze();
+  const n = S.uploads.length;
+  const files = n ? `${n === 1 ? 'un fișier CSV' : `${n} fișiere CSV`} în ${info.dirIn || 'folderul proiectului'}` : 'niciun fișier CSV';
+  const subj = from ? `, subiectul din ${from}` : S.text.trim() ? '' : '. Pune PDF-ul subiectului în proiect sau lipește textul mai jos';
+  ideStatus(`${info.project}: ${files}${subj}.`);
+}
+async function ideWrite() {
+  if (!window.dsadIDE || !S.gen || !S.ctx || !S.ctx.main) { ideStatus('Nu am încă cod de scris: lipește subiectul sau pune fișierele în proiect.'); return; }
+  const btn = $('#ideWrite');
+  btn.disabled = true;
+  ideStatus('Scriu fișierele în proiect…');
+  const fields = { run: '1', dirOut: S.settings.dirOut || '' };
+  for (const [n, c] of Object.entries(allCode())) fields['file:' + n] = c;
+  let res;
+  try { res = await window.dsadIDE.call('writeFiles', fields); } catch (e) { res = { ok: false, msg: String(e) }; }
+  btn.disabled = false;
+  ideStatus(res.msg || (res.ok ? 'Gata.' : 'Nu am putut scrie fișierele.'));
+  if (res.ok && S.uploads.length) run(); // verificarea cu exemplele, aici în panou
+}
+let ideConnected = false;
+function ideConnect() {
+  if (ideConnected || !window.dsadIDE) return;
+  ideConnected = true;
+  $('#ideBar').hidden = false;
+  ideSync();
+}
+$('#ideWrite').addEventListener('click', ideWrite);
+$('#ideReload').addEventListener('click', () => ideSync());
+window.addEventListener('dsad-ide-ready', ideConnect);
+
+// ───────────── pornire ─────────────
+route();
+if (IDE) {
+  $('#ideBar').hidden = false;
+  analyze();
+  ideConnect();
+  setTimeout(() => { if (!ideConnected) ideStatus('Nu sunt conectat la PyCharm. Închide și redeschide panoul DSAD.'); }, 5000);
+} else {
+  const draft = store.get('draft', null);
+  if (draft && draft.preset) loadPreset(draft.preset);
+  else {
+    S.text = (draft && draft.text) || '';
+    $('#problem').value = S.text;
+    analyze();
+  }
 }
