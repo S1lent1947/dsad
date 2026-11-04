@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsad.py</title>
+<meta name="description" content="Lipești subiectul de DSAD și primești codul pandas în stilul de la seminar, îl rulezi în browser și îl verifici cu exemplele din enunț.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231E1F22'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-weight='700' font-size='15' fill='%236AAB73'%3Epy%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#rezolva">dsad<span>.py</span></a>
+  <nav class="nav" aria-label="Secțiuni">
+    <a href="#rezolva" data-view="rezolva">Rezolvă</a>
+    <a href="#rezolvari" data-view="rezolvari">Rezolvări</a>
+    <a href="#fituica" data-view="fituica">Fițuică</a>
+  </nav>
+  <button class="theme" id="theme" type="button" aria-label="Schimbă tema (deschisă / închisă)" title="Temă deschisă / închisă">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 0 18V3z"/><circle cx="12" cy="12" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+  </button>
+</header>
+
+<main>
+  <section id="view-rezolva" class="view">
+    <div class="solver">
+      <div class="col-in">
+        <section class="panel paste">
+          <h1>Lipește subiectul</h1>
+          <p class="lead">Copiază tot textul din PDF, de la „În fișierul…” până la ultima cerință. Codul apare alături, scris ca la seminar.</p>
+          <textarea id="problem" spellcheck="false" aria-label="Textul subiectului" placeholder="În fișierul ….csv se află …&#10;&#10;Cerințe:&#10;1. Să se salveze în fișierul Cerinta1.csv …&#10;Exemplu&#10;Siruta,Localitate,…"></textarea>
+          <div class="presets" id="presets"><span>Sau deschide un exemplu:</span></div>
+        </section>
+
+        <section class="panel files">
+          <h2>Fișierele CSV</h2>
+          <p class="muted">Opțional. Cu fișierele încărcate, numele coloanelor sunt exacte și poți rula codul aici. Fișierele rămân pe calculatorul tău.</p>
+          <label class="drop" id="drop">
+            <input type="file" id="fileInput" accept=".csv,text/csv" multiple>
+            <span>Trage aici fișierele .csv sau <u>alege-le</u></span>
+          </label>
+          <div id="fileList" class="file-list"></div>
+        </section>
+
+        <section class="panel reqs-wrap">
+          <div class="reqs-head">
+            <h2>Cerințe</h2>
+            <span id="reqSummary" class="muted"></span>
+          </div>
+          <div id="reqs"></div>
+          <button class="btn ghost" id="addReq" type="button">Adaugă o cerință</button>
+        </section>
+      </div>
+
+      <div class="col-out">
+        <section class="ide" aria-label="Codul generat">
+          <div class="ide-bar">
+            <div class="ftabs" id="ftabs" role="tablist"></div>
+            <div class="ide-actions">
+              <button class="btn sm" id="resetBtn" type="button" hidden>Revino la codul generat</button>
+              <button class="btn sm" id="editBtn" type="button">Editează</button>
+              <button class="btn sm" id="copyBtn" type="button">Copiază</button>
+              <button class="btn sm" id="dlBtn" type="button">Descarcă</button>
+              <button class="btn run" id="runBtn" type="button"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M4 2.5v11l9-5.5z"/></svg>Rulează</button>
+            </div>
+          </div>
+          <div class="ide-body" id="ideBody">
+            <pre class="gutter" id="gutter" aria-hidden="true"></pre>
+            <pre class="code" id="code"></pre>
+            <textarea class="code-edit" id="codeEdit" spellcheck="false" aria-label="Editează codul" hidden></textarea>
+          </div>
+        </section>
+        <div id="warnings"></div>
+        <section id="run" class="run" aria-live="polite"></section>
+        <details class="panel settings" id="settings">
+          <summary>Setări cod</summary>
+          <div class="set-grid">
+            <label>Folderul cu date <input type="text" data-set="dirIn" spellcheck="false"></label>
+            <label>Folderul pentru rezultate <input type="text" data-set="dirOut" spellcheck="false"></label>
+            <label class="chk"><input type="checkbox" data-set="mkdir"> Creează folderul de rezultate dacă lipsește</label>
+            <label class="chk"><input type="checkbox" data-set="includeGroups"> <span><code>include_groups=False</code> (pandas 2.2 sau mai nou)</span></label>
+            <label class="chk"><input type="checkbox" data-set="split"> Funcțiile în <code>functii.py</code> separat</label>
+            <label>Valori lipsă în fișierul principal
+              <select data-set="nan">
+                <option value="auto">le înlocuiesc doar dacă există</option>
+                <option value="on">le înlocuiesc mereu</option>
+                <option value="off">nu le ating</option>
+              </select>
+            </label>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-rezolvari" class="view" hidden></section>
+  <section id="view-fituica" class="view" hidden></section>
+</main>
+
+<footer class="foot">
+  <p>Pentru DSAD, în stilul seminarelor 1–5. Codul rulează în browser cu Pyodide; fișierele tale nu sunt trimise nicăieri.</p>
+</footer>
+
+<script type="module" src="assets/app.js"></script>
+</body>
+</html>
